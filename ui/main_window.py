@@ -84,10 +84,6 @@ class MainWindow(QMainWindow):
         search_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
         search_shortcut.activated.connect(lambda: self.search_input.setFocus())
         
-        # Close window shortcut (Esc)
-        close_shortcut = QShortcut(QKeySequence("Esc"), self)
-        close_shortcut.activated.connect(self.hide)
-        
         # Refresh shortcut (F5)
         refresh_shortcut = QShortcut(QKeySequence("F5"), self)
         refresh_shortcut.activated.connect(self.refresh_history)

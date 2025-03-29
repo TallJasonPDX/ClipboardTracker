@@ -7,7 +7,8 @@ import time
 import io
 import platform
 import psutil
-from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+import os
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal, QBuffer, QByteArray
 from PyQt5.QtGui import QGuiApplication, QImage
 from source_tracker import SourceTracker
 
@@ -58,21 +59,37 @@ class ClipboardMonitor(QObject):
             if clipboard_item is None:
                 return
                 
-            # Check if content actually changed
-            if self.content_changed(clipboard_item):
-                self.last_content = clipboard_item
-                
-                # Add source information
-                clipboard_item['source'] = self.source_tracker.get_source_info()
-                clipboard_item['timestamp'] = time.time()
-                
-                # Save to storage
-                self.storage_manager.add_clipboard_item(clipboard_item)
-                
-                # Emit signal
-                self.clipboard_changed.emit(clipboard_item)
+            # Add a processing lock to prevent duplicate events
+            if hasattr(self, '_processing'):
+                return
+            self._processing = True
+            
+            try:
+                # Check if content actually changed
+                if self.content_changed(clipboard_item):
+                    self.last_content = clipboard_item.copy()  # Make a copy to prevent reference issues
+                    
+                    # Add source information
+                    clipboard_item['source'] = self.source_tracker.get_source_info()
+                    clipboard_item['timestamp'] = time.time()
+                    
+                    # Save to storage
+                    self.storage_manager.add_clipboard_item(clipboard_item)
+                    
+                    # Immediately save history to disk
+                    try:
+                        self.storage_manager.save_history()
+                    except Exception as e:
+                        print(f"Error saving clipboard history: {e}")
+                    
+                    # Emit signal
+                    self.clipboard_changed.emit(clipboard_item)
+            finally:
+                delattr(self, '_processing')
         except Exception as e:
             print(f"Error processing clipboard: {e}")
+            if hasattr(self, '_processing'):
+                delattr(self, '_processing')
     
     def get_clipboard_content(self):
         """Capture the current clipboard content"""
@@ -88,20 +105,55 @@ class ClipboardMonitor(QObject):
             if mime_data.hasText():
                 text = mime_data.text()
                 if text:
-                    clipboard_item["type"] = "text"
-                    clipboard_item["content"] = text
+                    # Check if the text is actually a base64 image
+                    if text.startswith('data:image/'):
+                        try:
+                            # Extract the base64 data after the comma
+                            import base64
+                            header, b64data = text.split(',', 1)
+                            image_data = base64.b64decode(b64data)
+                            
+                            # Create QImage from the decoded data
+                            image = QImage()
+                            image.loadFromData(image_data)
+                            
+                            if not image.isNull():
+                                # Use QBuffer to save image data
+                                byte_array = QByteArray()
+                                buffer = QBuffer(byte_array)
+                                buffer.open(QBuffer.WriteOnly)
+                                image.save(buffer, "PNG")
+                                buffer.close()
+                                
+                                clipboard_item["type"] = "image"
+                                clipboard_item["content"] = bytes(byte_array.data())
+                                clipboard_item["width"] = image.width()
+                                clipboard_item["height"] = image.height()
+                            else:
+                                clipboard_item["type"] = "text"
+                                clipboard_item["content"] = text
+                        except Exception as e:
+                            print(f"Error processing base64 image: {e}")
+                            # If any error occurs during base64 processing, treat as text
+                            clipboard_item["type"] = "text"
+                            clipboard_item["content"] = text
+                    else:
+                        clipboard_item["type"] = "text"
+                        clipboard_item["content"] = text
             
-            # Check for image content
+            # Check for image content if we haven't already found a base64 image
             elif mime_data.hasImage():
                 image = QImage(mime_data.imageData())
                 if not image.isNull():
-                    # Convert QImage to bytes
-                    buffer = io.BytesIO()
+                    # Use QBuffer to save image data
+                    byte_array = QByteArray()
+                    buffer = QBuffer(byte_array)
+                    buffer.open(QBuffer.WriteOnly)
                     image.save(buffer, "PNG")
-                    image_data = buffer.getvalue()
+                    buffer.close()
                     
                     clipboard_item["type"] = "image"
-                    clipboard_item["content"] = image_data
+                    clipboard_item["content"] = bytes(byte_array.data())
                     clipboard_item["width"] = image.width()
                     clipboard_item["height"] = image.height()
                     
@@ -126,15 +178,17 @@ class ClipboardMonitor(QObject):
                 return True
                 
             # If types are different, content has changed
-            if clipboard_item.get("type") != self.last_content.get("type"):
+            if clipboard_item["type"] != self.last_content["type"]:
                 return True
                 
             # Compare based on content type
             if clipboard_item["type"] == "text":
                 return clipboard_item["content"] != self.last_content["content"]
             elif clipboard_item["type"] == "image":
-                # For images, compare the raw image data
-                return clipboard_item["content"] != self.last_content["content"]
+                # For images, compare the raw image data bytes
+                current_bytes = bytes(clipboard_item["content"])
+                last_bytes = bytes(self.last_content["content"])
+                return current_bytes != last_bytes
                 
             # Default: assume it changed
             return True
@@ -161,15 +215,20 @@ class ClipboardMonitor(QObject):
                 return True
             elif clipboard_item["type"] == "image":
                 try:
-                    # Convert bytes to QImage
-                    image_data = clipboard_item["content"]
-                    image = QImage()
-                    if image.loadFromData(image_data):
-                        clipboard.setImage(image)
-                        return True
-                    else:
-                        print("Failed to load image data")
+                    # Get image path from the storage manager's images directory
+                    image_path = os.path.join(self.storage_manager.images_dir, clipboard_item["content"])
+                    if not os.path.exists(image_path):
+                        print("Image file not found")
                         return False
+                        
+                    # Load image from file
+                    image = QImage(image_path)
+                    if image.isNull():
+                        print("Failed to load image")
+                        return False
+                        
+                    clipboard.setImage(image)
+                    return True
                 except Exception as e:
                     print(f"Error copying image to clipboard: {e}")
                     return False

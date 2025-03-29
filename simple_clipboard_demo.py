@@ -53,8 +53,11 @@ class SimpleStorageManager:
         if len(self.history) > 100:
             self.history = self.history[:100]
         
-        # Save to file
-        self.save_history()
+        # Save to file immediately
+        try:
+            self.save_history()
+        except Exception as e:
+            print(f"Error saving clipboard history to disk: {e}")
     
     def get_history(self, limit=None, search=None):
         """Get clipboard history, optionally filtered"""

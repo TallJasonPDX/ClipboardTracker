@@ -6,7 +6,6 @@ import os
 import json
 import time
 from datetime import datetime
-import base64
 
 class StorageManager:
     """
@@ -25,6 +24,11 @@ class StorageManager:
         # Create storage directory if it doesn't exist
         if not os.path.exists(self.storage_dir):
             os.makedirs(self.storage_dir)
+            
+        # Create images directory if it doesn't exist
+        self.images_dir = os.path.join(self.storage_dir, "images")
+        if not os.path.exists(self.images_dir):
+            os.makedirs(self.images_dir)
         
         # Initialize history
         self.clipboard_history = []
@@ -37,19 +41,7 @@ class StorageManager:
         try:
             if os.path.exists(self.storage_file):
                 with open(self.storage_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    
-                    # Process the loaded data
-                    for item in data:
-                        # Convert image data from base64 if needed
-                        if item.get('type') == 'image' and isinstance(item.get('content'), str):
-                            try:
-                                item['content'] = base64.b64decode(item['content'])
-                            except Exception:
-                                # If decoding fails, skip this item
-                                continue
-                    
-                    self.clipboard_history = data
+                    self.clipboard_history = json.load(f)
         except (json.JSONDecodeError, IOError) as e:
             print(f"Error loading clipboard history: {e}")
             # If file is corrupted, start with empty history
@@ -58,22 +50,8 @@ class StorageManager:
     def save_history(self):
         """Save clipboard history to the JSON file"""
         try:
-            # Prepare data for saving
-            save_data = []
-            
-            for item in self.clipboard_history:
-                # Create a copy to avoid modifying the original
-                save_item = item.copy()
-                
-                # Convert binary image data to base64 for storage
-                if item.get('type') == 'image' and isinstance(item.get('content'), bytes):
-                    save_item['content'] = base64.b64encode(item['content']).decode('utf-8')
-                
-                save_data.append(save_item)
-            
-            # Write to file
             with open(self.storage_file, 'w', encoding='utf-8') as f:
-                json.dump(save_data, f, ensure_ascii=False, indent=2)
+                json.dump(self.clipboard_history, f, ensure_ascii=False, indent=2)
         except IOError as e:
             print(f"Error saving clipboard history: {e}")
     
@@ -88,12 +66,37 @@ class StorageManager:
         
         item['datetime'] = datetime.fromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
         
+        # Handle image content
+        if item['type'] == 'image':
+            image_filename = f"image_{item['id']}.png"
+            image_path = os.path.join(self.images_dir, image_filename)
+            
+            # Save image to file
+            try:
+                with open(image_path, 'wb') as f:
+                    f.write(item['content'])
+                # Replace binary content with filename reference
+                item['content'] = image_filename
+            except IOError as e:
+                print(f"Error saving image file: {e}")
+                return None
+        
         # Add to history
         self.clipboard_history.insert(0, item)  # Add to beginning
         
         # Limit history size (e.g., 100 items)
         max_items = 100
         if len(self.clipboard_history) > max_items:
+            # Clean up old image files when removing history items
+            for old_item in self.clipboard_history[max_items:]:
+                if old_item['type'] == 'image':
+                    old_image_path = os.path.join(self.images_dir, old_item['content'])
+                    try:
+                        if os.path.exists(old_image_path):
+                            os.remove(old_image_path)
+                    except OSError as e:
+                        print(f"Error removing old image file: {e}")
+            
             self.clipboard_history = self.clipboard_history[:max_items]
         
         # Save to file
@@ -144,10 +147,31 @@ class StorageManager:
     
     def clear_history(self):
         """Clear the clipboard history"""
+        # Delete all image files
+        for item in self.clipboard_history:
+            if item['type'] == 'image':
+                image_path = os.path.join(self.images_dir, item['content'])
+                try:
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                except OSError as e:
+                    print(f"Error removing image file: {e}")
+        
         self.clipboard_history = []
         self.save_history()
     
     def delete_item(self, item_id):
         """Delete a specific item from history"""
+        # Find and delete image file if it exists
+        for item in self.clipboard_history:
+            if item['id'] == item_id and item['type'] == 'image':
+                image_path = os.path.join(self.images_dir, item['content'])
+                try:
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                except OSError as e:
+                    print(f"Error removing image file: {e}")
+        
+        # Remove item from history
         self.clipboard_history = [item for item in self.clipboard_history if item['id'] != item_id]
         self.save_history()

@@ -5,6 +5,8 @@ Implements the system tray icon and menu for the application
 from PyQt5.QtWidgets import (QSystemTrayIcon, QMenu, QAction, 
                            QApplication, QStyle, QWidget)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QKeySequence
+import keyboard
 
 from ui.main_window import MainWindow
 
@@ -22,6 +24,7 @@ class SystemTrayIcon(QSystemTrayIcon):
         
         self.init_menu()
         self.set_connections()
+        self.setup_hotkey()
     
     def init_menu(self):
         """Initialize the tray icon menu"""
@@ -65,6 +68,36 @@ class SystemTrayIcon(QSystemTrayIcon):
         # Connect clipboard changed signal
         self.clipboard_monitor.clipboard_changed.connect(self.on_clipboard_changed)
     
+    def setup_hotkey(self):
+        """Set up global hotkey"""
+        try:
+            # Register Ctrl+` hotkey
+            keyboard.add_hotkey('ctrl+`', self.toggle_window)
+            hotkey = "Ctrl+`"
+            hotkey_registered = True
+        except:
+            try:
+                # Try alternative Ctrl+Space hotkey
+                keyboard.add_hotkey('ctrl+space', self.toggle_window)
+                hotkey = "Ctrl+Space"
+                hotkey_registered = True
+            except:
+                print("Warning: Could not register global hotkeys")
+                hotkey_registered = False
+
+        # Update window title with hotkey info
+        if hotkey_registered:
+            self.main_window.setWindowTitle(f"{self.main_window.windowTitle()} (Hotkey: {hotkey})")
+        else:
+            self.main_window.setWindowTitle(f"{self.main_window.windowTitle()} (No global hotkey)")
+    
+    def toggle_window(self):
+        """Toggle the main window visibility"""
+        if self.main_window.isVisible():
+            self.main_window.hide()
+        else:
+            self.show_main_window()
+    
     def on_tray_icon_activated(self, reason):
         """Handle tray icon activation"""
         if reason == QSystemTrayIcon.Trigger or reason == QSystemTrayIcon.DoubleClick:
@@ -76,6 +109,10 @@ class SystemTrayIcon(QSystemTrayIcon):
         self.main_window.show()
         self.main_window.raise_()
         self.main_window.activateWindow()
+        
+        # If window is minimized, restore it
+        if self.main_window.isMinimized():
+            self.main_window.setWindowState(self.main_window.windowState() & ~Qt.WindowMinimized)
     
     def toggle_monitoring(self):
         """Toggle clipboard monitoring on/off"""
@@ -99,13 +136,20 @@ class SystemTrayIcon(QSystemTrayIcon):
         """Handle clipboard content changes"""
         # Get source information
         source = "Unknown source"
+        url = ""
         if 'source' in item:
             app_info = item['source'].get('application', {})
             app_name = app_info.get('name', 'Unknown')
             
             if app_info.get('type') == 'browser':
-                domain = item['source'].get('website', {}).get('domain', '')
-                if domain:
+                website_info = item['source'].get('website', {})
+                url = website_info.get('url', '')
+                domain = website_info.get('domain', '')
+                title = website_info.get('title', '')
+                
+                if url:
+                    source = f"{title}\n{url}"
+                elif domain:
                     source = f"{domain} ({app_info.get('browser', app_name)})"
                 else:
                     source = app_info.get('browser', app_name)

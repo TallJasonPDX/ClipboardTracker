@@ -3,6 +3,7 @@ History Widget Module
 Displays the clipboard history with source information
 """
 import io
+import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                            QPushButton, QScrollArea, QFrame, QSizePolicy,
                            QMenu, QAction, QToolButton)
@@ -31,22 +32,33 @@ class ClipboardItemWidget(QFrame):
         
         # Main layout
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
         
         # Header with source info and timestamp
-        header_layout = QHBoxLayout()
+        header_layout = QVBoxLayout()
+        header_layout.setSpacing(4)
+        
+        # Source info container
+        source_container = QWidget()
+        source_container.setStyleSheet("background-color: #f0f7ff; border-radius: 4px; padding: 4px;")
+        source_layout = QVBoxLayout(source_container)
+        source_layout.setSpacing(2)
+        source_layout.setContentsMargins(8, 8, 8, 8)
         
         # Source info
         source_info = self.format_source_info()
         source_label = QLabel(source_info)
         source_label.setStyleSheet("font-weight: bold; color: #0066cc;")
+        source_label.setWordWrap(True)
+        source_layout.addWidget(source_label)
         
-        # Timestamp
+        # Timestamp in source container
         time_label = QLabel(self.item.get('datetime', ''))
-        time_label.setAlignment(Qt.AlignRight)
         time_label.setStyleSheet("color: #666666;")
+        source_layout.addWidget(time_label)
         
-        header_layout.addWidget(source_label)
-        header_layout.addWidget(time_label)
+        # Add source container to header
+        header_layout.addWidget(source_container)
         
         # Add header to main layout
         layout.addLayout(header_layout)
@@ -64,11 +76,13 @@ class ClipboardItemWidget(QFrame):
         copy_button = QPushButton("Copy")
         copy_button.setIcon(QIcon.fromTheme("edit-copy"))
         copy_button.clicked.connect(self.copy_to_clipboard)
+        copy_button.setStyleSheet("QPushButton { padding: 5px 15px; }")
         
         # Delete button
         delete_button = QPushButton("Delete")
         delete_button.setIcon(QIcon.fromTheme("edit-delete"))
         delete_button.clicked.connect(self.delete_item)
+        delete_button.setStyleSheet("QPushButton { padding: 5px 15px; }")
         
         button_layout.addWidget(copy_button)
         button_layout.addWidget(delete_button)
@@ -83,26 +97,36 @@ class ClipboardItemWidget(QFrame):
         
         app_name = app_info.get('name', 'Unknown')
         app_type = app_info.get('type', 'unknown')
+        window_title = app_info.get('window_title', '')
         
         if app_type == 'browser':
             browser_name = app_info.get('browser', app_name)
             website_info = source.get('website', {})
+            url = website_info.get('url', '')
             domain = website_info.get('domain', '')
+            title = website_info.get('title', '')
             
-            if domain:
-                return f"Copied from {domain} ({browser_name})"
+            if url and title:
+                return f"{title}\n{url}\n({browser_name})"
+            elif domain:
+                return f"From {domain}\n({browser_name})"
             else:
-                return f"Copied from {browser_name}"
+                return f"From {window_title}\n({browser_name})"
         else:
-            window_title = app_info.get('window_title', '')
             if window_title:
-                return f"Copied from {window_title} ({app_name})"
+                return f"From {window_title}\n({app_name})"
             else:
-                return f"Copied from {app_name}"
+                return f"From {app_name}"
     
     def add_text_content(self, layout):
         """Add text content to the widget"""
         content = self.item.get('content', '')
+        
+        # Create content container
+        content_container = QWidget()
+        content_container.setStyleSheet("background-color: #f9f9f9; border-radius: 4px;")
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(12, 12, 12, 12)
         
         # Limit displayed text length
         max_display_length = 500
@@ -114,45 +138,62 @@ class ClipboardItemWidget(QFrame):
         text_label = QLabel(display_text)
         text_label.setWordWrap(True)
         text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        text_label.setStyleSheet("background-color: #f9f9f9; padding: 8px; border-radius: 4px;")
+        text_label.setStyleSheet("background: none; padding: 0;")
         
-        layout.addWidget(text_label)
+        content_layout.addWidget(text_label)
+        layout.addWidget(content_container)
     
     def add_image_content(self, layout):
         """Add image content to the widget"""
-        image_data = self.item.get('content')
+        image_filename = self.item.get('content')
         width = self.item.get('width', 200)
         height = self.item.get('height', 200)
         
-        if image_data:
-            # Create QImage from binary data
-            qimage = QImage()
-            qimage.loadFromData(image_data)
+        # Create content container
+        content_container = QWidget()
+        content_container.setStyleSheet("background-color: #f9f9f9; border-radius: 4px;")
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        content_layout.setSpacing(8)
+        
+        if image_filename:
+            # Get full image path
+            image_path = os.path.join(self.clipboard_monitor.storage_manager.images_dir, image_filename)
             
-            # Create pixmap
-            pixmap = QPixmap.fromImage(qimage)
-            
-            # Resize if too large
-            max_preview_size = 300
-            if pixmap.width() > max_preview_size or pixmap.height() > max_preview_size:
-                pixmap = pixmap.scaled(
-                    max_preview_size, 
-                    max_preview_size, 
-                    Qt.KeepAspectRatio, 
-                    Qt.SmoothTransformation
-                )
-            
-            # Create image label
-            image_label = QLabel()
-            image_label.setPixmap(pixmap)
-            image_label.setAlignment(Qt.AlignCenter)
-            
-            # Add size info
-            size_label = QLabel(f"Image: {width}x{height}")
-            size_label.setAlignment(Qt.AlignCenter)
-            
-            layout.addWidget(image_label)
-            layout.addWidget(size_label)
+            if os.path.exists(image_path):
+                # Load image from file
+                pixmap = QPixmap(image_path)
+                
+                # Resize if too large
+                max_preview_size = 300
+                if pixmap.width() > max_preview_size or pixmap.height() > max_preview_size:
+                    pixmap = pixmap.scaled(
+                        max_preview_size, 
+                        max_preview_size, 
+                        Qt.KeepAspectRatio, 
+                        Qt.SmoothTransformation
+                    )
+                
+                # Create image label with border
+                image_label = QLabel()
+                image_label.setPixmap(pixmap)
+                image_label.setAlignment(Qt.AlignCenter)
+                image_label.setStyleSheet("border: 1px solid #ddd; border-radius: 2px; padding: 4px;")
+                content_layout.addWidget(image_label)
+                
+                # Add size info and file info
+                size_label = QLabel(f"Image: {width}x{height} - {image_filename}")
+                size_label.setAlignment(Qt.AlignCenter)
+                size_label.setStyleSheet("color: #666666;")
+                content_layout.addWidget(size_label)
+            else:
+                # Show error if image file is missing
+                error_label = QLabel("Image file not found")
+                error_label.setStyleSheet("color: red;")
+                error_label.setAlignment(Qt.AlignCenter)
+                content_layout.addWidget(error_label)
+                
+        layout.addWidget(content_container)
     
     def copy_to_clipboard(self):
         """Copy this item back to the clipboard"""

@@ -8,4 +8,5 @@ dependencies = [
     "pillow>=11.1.0",
     "psutil>=7.0.0",
     "pyqt5>=5.15.11",
+    "qhotkey>=0.2.1",
 ]
