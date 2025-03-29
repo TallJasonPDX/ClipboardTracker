@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (QSystemTrayIcon, QMenu, QAction,
                            QApplication, QStyle, QWidget)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QKeySequence
-import keyboard
 
 from ui.main_window import MainWindow
 
@@ -24,7 +23,6 @@ class SystemTrayIcon(QSystemTrayIcon):
         
         self.init_menu()
         self.set_connections()
-        self.setup_hotkey()
     
     def init_menu(self):
         """Initialize the tray icon menu"""
@@ -68,41 +66,6 @@ class SystemTrayIcon(QSystemTrayIcon):
         # Connect clipboard changed signal
         self.clipboard_monitor.clipboard_changed.connect(self.on_clipboard_changed)
     
-    def setup_hotkey(self):
-        """Set up global hotkey"""
-        try:
-            # Register Ctrl+` hotkey
-            keyboard.add_hotkey('ctrl+`', self.toggle_window)
-            hotkey = "Ctrl+`"
-            hotkey_registered = True
-        except:
-            try:
-                # Try alternative Ctrl+Space hotkey
-                keyboard.add_hotkey('ctrl+space', self.toggle_window)
-                hotkey = "Ctrl+Space"
-                hotkey_registered = True
-            except:
-                print("Warning: Could not register global hotkeys")
-                hotkey_registered = False
-
-        # Update window title with hotkey info
-        if hotkey_registered:
-            self.main_window.setWindowTitle(f"{self.main_window.windowTitle()} (Hotkey: {hotkey})")
-        else:
-            self.main_window.setWindowTitle(f"{self.main_window.windowTitle()} (No global hotkey)")
-    
-    def toggle_window(self):
-        """Toggle the main window visibility"""
-        if self.main_window.isVisible():
-            self.main_window.hide()
-        else:
-            self.show_main_window()
-    
-    def on_tray_icon_activated(self, reason):
-        """Handle tray icon activation"""
-        if reason == QSystemTrayIcon.Trigger or reason == QSystemTrayIcon.DoubleClick:
-            self.show_main_window()
-    
     def show_main_window(self):
         """Show the main application window"""
         # Show, raise and activate window
@@ -131,6 +94,11 @@ class SystemTrayIcon(QSystemTrayIcon):
         if self.main_window.isVisible():
             self.main_window.refresh_history()
         self.showMessage("Clipboard Manager", "Clipboard history cleared")
+    
+    def on_tray_icon_activated(self, reason):
+        """Handle tray icon activation"""
+        if reason == QSystemTrayIcon.Trigger or reason == QSystemTrayIcon.DoubleClick:
+            self.show_main_window()
     
     def on_clipboard_changed(self, item):
         """Handle clipboard content changes"""

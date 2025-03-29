@@ -66,6 +66,10 @@ class StorageManager:
         
         item['datetime'] = datetime.fromtimestamp(item['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
         
+        # Initialize pinned status
+        if 'pinned' not in item:
+            item['pinned'] = False
+        
         # Handle image content
         if item['type'] == 'image':
             image_filename = f"image_{item['id']}.png"
@@ -104,18 +108,32 @@ class StorageManager:
         
         return item
     
-    def get_history(self, limit=None, search=None):
+    def toggle_pin(self, item_id):
+        """Toggle the pinned status of an item"""
+        for item in self.clipboard_history:
+            if item['id'] == item_id:
+                item['pinned'] = not item.get('pinned', False)
+                self.save_history()
+                return item['pinned']
+        return False
+
+    def get_history(self, limit=None, search=None, pinned_only=False):
         """
         Get clipboard history, optionally filtered
         
         Args:
             limit: Maximum number of items to return
             search: Search text to filter items
+            pinned_only: Only return pinned items
             
         Returns:
             List of clipboard items
         """
         results = self.clipboard_history
+        
+        # Apply pinned filter if requested
+        if pinned_only:
+            results = [item for item in results if item.get('pinned', False)]
         
         # Apply search filter if provided
         if search and search.strip():

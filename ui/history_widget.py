@@ -17,29 +17,50 @@ class ClipboardItemWidget(QFrame):
         super().__init__(parent)
         self.item = item
         self.clipboard_monitor = clipboard_monitor
-        
+        self.initStyleSheet()
         self.init_ui()
+    
+    def initStyleSheet(self):
+        """Initialize responsive styles"""
+        self.setStyleSheet("""
+            QFrame {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                margin: 4px;
+                padding: 8px;
+            }
+            QLabel {
+                font-size: 13px;
+            }
+            @media (max-width: 400px) {
+                QLabel {
+                    font-size: 11px;
+                }
+            }
+            QPushButton {
+                padding: 4px 12px;
+                min-width: 60px;
+            }
+            @media (max-width: 400px) {
+                QPushButton {
+                    padding: 2px 8px;
+                    min-width: 40px;
+                }
+            }
+        """)
         
     def init_ui(self):
         """Initialize the UI for this clipboard item"""
-        self.setFrameShape(QFrame.StyledPanel)
-        self.setFrameShadow(QFrame.Raised)
-        self.setLineWidth(1)
-        self.setMidLineWidth(0)
-        
-        # Set mouse tracking for hover effects
-        self.setMouseTracking(True)
-        
         # Main layout
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
         
-        # Header with source info and timestamp
-        header_layout = QVBoxLayout()
-        header_layout.setSpacing(4)
+        # Header with source info, timestamp, and pin button
+        header_layout = QHBoxLayout()
         
-        # Source info container
+        # Source and timestamp container
         source_container = QWidget()
+        source_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         source_container.setStyleSheet("background-color: #f0f7ff; border-radius: 4px; padding: 4px;")
         source_layout = QVBoxLayout(source_container)
         source_layout.setSpacing(2)
@@ -60,14 +81,39 @@ class ClipboardItemWidget(QFrame):
         # Add source container to header
         header_layout.addWidget(source_container)
         
+        # Pin button
+        self.pin_button = QPushButton()
+        self.pin_button.setIcon(QIcon.fromTheme("pin" if self.item.get('pinned', False) else "pin-outline"))
+        self.pin_button.setToolTip("Pin/Unpin")
+        self.pin_button.setFixedSize(32, 32)
+        self.pin_button.setStyleSheet("""
+            QPushButton {
+                border: none;
+                border-radius: 16px;
+                background: """ + ("#e0e0ff" if self.item.get('pinned', False) else "#f0f0f0") + """;
+            }
+            QPushButton:hover {
+                background: #d0d0ff;
+            }
+        """)
+        self.pin_button.clicked.connect(self.toggle_pin)
+        header_layout.addWidget(self.pin_button)
+        
         # Add header to main layout
         layout.addLayout(header_layout)
         
         # Content depends on item type
+        content_container = QWidget()
+        content_container.setStyleSheet("background-color: #f9f9f9; border-radius: 4px;")
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        
         if self.item['type'] == 'text':
-            self.add_text_content(layout)
+            self.add_text_content(content_layout)
         elif self.item['type'] == 'image':
-            self.add_image_content(layout)
+            self.add_image_content(content_layout)
+        
+        layout.addWidget(content_container)
         
         # Add buttons
         button_layout = QHBoxLayout()
@@ -76,19 +122,51 @@ class ClipboardItemWidget(QFrame):
         copy_button = QPushButton("Copy")
         copy_button.setIcon(QIcon.fromTheme("edit-copy"))
         copy_button.clicked.connect(self.copy_to_clipboard)
-        copy_button.setStyleSheet("QPushButton { padding: 5px 15px; }")
         
         # Delete button
         delete_button = QPushButton("Delete")
         delete_button.setIcon(QIcon.fromTheme("edit-delete"))
         delete_button.clicked.connect(self.delete_item)
-        delete_button.setStyleSheet("QPushButton { padding: 5px 15px; }")
         
         button_layout.addWidget(copy_button)
         button_layout.addWidget(delete_button)
         button_layout.addStretch()
         
         layout.addLayout(button_layout)
+    
+    def toggle_pin(self):
+        """Toggle pin status of the item"""
+        if self.clipboard_monitor.storage_manager.toggle_pin(self.item['id']):
+            self.pin_button.setIcon(QIcon.fromTheme("pin"))
+            self.pin_button.setStyleSheet("""
+                QPushButton {
+                    border: none;
+                    border-radius: 16px;
+                    background: #e0e0ff;
+                }
+                QPushButton:hover {
+                    background: #d0d0ff;
+                }
+            """)
+        else:
+            self.pin_button.setIcon(QIcon.fromTheme("pin-outline"))
+            self.pin_button.setStyleSheet("""
+                QPushButton {
+                    border: none;
+                    border-radius: 16px;
+                    background: #f0f0f0;
+                }
+                QPushButton:hover {
+                    background: #d0d0ff;
+                }
+            """)
+        
+        # Refresh the parent history widget if it's the pinned tab
+        parent = self.parent()
+        while parent and not isinstance(parent, HistoryWidget):
+            parent = parent.parent()
+        if parent and parent.pinned_only:
+            parent.update_history()
     
     def format_source_info(self):
         """Format source information for display"""
@@ -122,12 +200,6 @@ class ClipboardItemWidget(QFrame):
         """Add text content to the widget"""
         content = self.item.get('content', '')
         
-        # Create content container
-        content_container = QWidget()
-        content_container.setStyleSheet("background-color: #f9f9f9; border-radius: 4px;")
-        content_layout = QVBoxLayout(content_container)
-        content_layout.setContentsMargins(12, 12, 12, 12)
-        
         # Limit displayed text length
         max_display_length = 500
         display_text = content
@@ -140,21 +212,13 @@ class ClipboardItemWidget(QFrame):
         text_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         text_label.setStyleSheet("background: none; padding: 0;")
         
-        content_layout.addWidget(text_label)
-        layout.addWidget(content_container)
+        layout.addWidget(text_label)
     
     def add_image_content(self, layout):
         """Add image content to the widget"""
         image_filename = self.item.get('content')
         width = self.item.get('width', 200)
         height = self.item.get('height', 200)
-        
-        # Create content container
-        content_container = QWidget()
-        content_container.setStyleSheet("background-color: #f9f9f9; border-radius: 4px;")
-        content_layout = QVBoxLayout(content_container)
-        content_layout.setContentsMargins(12, 12, 12, 12)
-        content_layout.setSpacing(8)
         
         if image_filename:
             # Get full image path
@@ -179,21 +243,19 @@ class ClipboardItemWidget(QFrame):
                 image_label.setPixmap(pixmap)
                 image_label.setAlignment(Qt.AlignCenter)
                 image_label.setStyleSheet("border: 1px solid #ddd; border-radius: 2px; padding: 4px;")
-                content_layout.addWidget(image_label)
+                layout.addWidget(image_label)
                 
                 # Add size info and file info
                 size_label = QLabel(f"Image: {width}x{height} - {image_filename}")
                 size_label.setAlignment(Qt.AlignCenter)
                 size_label.setStyleSheet("color: #666666;")
-                content_layout.addWidget(size_label)
+                layout.addWidget(size_label)
             else:
                 # Show error if image file is missing
                 error_label = QLabel("Image file not found")
                 error_label.setStyleSheet("color: red;")
                 error_label.setAlignment(Qt.AlignCenter)
-                content_layout.addWidget(error_label)
-                
-        layout.addWidget(content_container)
+                layout.addWidget(error_label)
     
     def copy_to_clipboard(self):
         """Copy this item back to the clipboard"""
@@ -250,6 +312,7 @@ class HistoryWidget(QScrollArea):
         self.clipboard_monitor = clipboard_monitor
         self.storage_manager = storage_manager
         self.filter_type = filter_type
+        self.pinned_only = False  # Default to showing all items
         
         self.init_ui()
         self.update_history()
@@ -276,7 +339,7 @@ class HistoryWidget(QScrollArea):
         self.clear_layout()
         
         # Get history from storage manager
-        history = self.storage_manager.get_history(search=search)
+        history = self.storage_manager.get_history(search=search, pinned_only=self.pinned_only)
         
         # Filter by type if specified
         if self.filter_type:
@@ -289,7 +352,8 @@ class HistoryWidget(QScrollArea):
                 self.layout.addWidget(item_widget)
         else:
             # Show empty state
-            empty_label = QLabel("No clipboard history found")
+            message = "No pinned items" if self.pinned_only else "No clipboard history found"
+            empty_label = QLabel(message)
             empty_label.setAlignment(Qt.AlignCenter)
             empty_label.setStyleSheet("color: #888; font-size: 14px; padding: 20px;")
             self.layout.addWidget(empty_label)

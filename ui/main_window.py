@@ -28,11 +28,13 @@ class MainWindow(QMainWindow):
         """Initialize the user interface"""
         # Set window properties
         self.setWindowTitle("Clipboard History Manager")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(300, 400)  # Reduced minimum width to 300px
         
         # Main widget and layout
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(8, 8, 8, 8)  # Reduced margins for smaller screens
         
         # Create search bar
         search_layout = QHBoxLayout()
@@ -41,8 +43,9 @@ class MainWindow(QMainWindow):
         self.search_input.setPlaceholderText("Search clipboard history...")
         self.search_input.textChanged.connect(self.search_history)
         
-        clear_button = QPushButton("Clear History")
+        clear_button = QPushButton("Clear")
         clear_button.clicked.connect(self.confirm_clear_history)
+        clear_button.setMaximumWidth(60)  # Make clear button smaller
         
         search_layout.addWidget(search_label)
         search_layout.addWidget(self.search_input, 1)
@@ -53,6 +56,28 @@ class MainWindow(QMainWindow):
         
         # Create tab widget
         self.tab_widget = QTabWidget()
+        self.tab_widget.setDocumentMode(True)  # Modern tab style
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            QTabBar::tab {
+                padding: 6px 12px;
+                margin: 2px;
+            }
+            @media (max-width: 400px) {
+                QTabBar::tab {
+                    padding: 4px 8px;
+                    margin: 1px;
+                }
+            }
+        """)
+        
+        # Pinned items tab
+        self.pinned_widget = HistoryWidget(self.clipboard_monitor, self.storage_manager)
+        self.pinned_widget.pinned_only = True  # Add this flag to identify pinned tab
+        self.tab_widget.addTab(self.pinned_widget, "Pinned")
         
         # All items tab
         self.history_widget = HistoryWidget(self.clipboard_monitor, self.storage_manager)
@@ -69,7 +94,17 @@ class MainWindow(QMainWindow):
         # Add tab widget to main layout
         main_layout.addWidget(self.tab_widget)
         
-        # Status bar
+        # Status bar with responsive font size
+        self.statusBar().setStyleSheet("""
+            QStatusBar {
+                font-size: 12px;
+            }
+            @media (max-width: 400px) {
+                QStatusBar {
+                    font-size: 10px;
+                }
+            }
+        """)
         self.statusBar().showMessage("Ready")
         
         # Set central widget
@@ -93,12 +128,14 @@ class MainWindow(QMainWindow):
         search_text = self.search_input.text()
         
         # Update all tabs with search results
+        self.pinned_widget.update_history(search=search_text)
         self.history_widget.update_history(search=search_text)
         self.text_widget.update_history(search=search_text)
         self.image_widget.update_history(search=search_text)
     
     def refresh_history(self):
         """Refresh the clipboard history display"""
+        self.pinned_widget.update_history()
         self.history_widget.update_history()
         self.text_widget.update_history()
         self.image_widget.update_history()
@@ -107,6 +144,7 @@ class MainWindow(QMainWindow):
     def on_clipboard_changed(self, item):
         """Handle clipboard content changes"""
         # Update the history widgets
+        self.pinned_widget.update_history()
         self.history_widget.update_history()
         
         if item['type'] == 'text':

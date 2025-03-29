@@ -48,6 +48,15 @@ def main():
     app.setQuitOnLastWindowClosed(False)  # Allow app to run in background
     app.setApplicationName("Clipboard History Manager")
     
+    # Set up custom icons
+    app_icon = QIcon("assets/app_icon.svg")
+    QIcon.setThemeName("custom")  # Use custom theme name
+    QIcon.setThemeSearchPaths(["assets"])  # Set theme search path
+    
+    # Add icon theme files
+    QIcon.setFallbackThemeName("custom")
+    QIcon.setFallbackSearchPaths(["assets"])
+    
     # Create storage manager
     storage_manager = StorageManager()
     
