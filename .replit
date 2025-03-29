@@ -1,0 +1,52 @@
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Clipboard Manager"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "clipboard_app"
+
+[[workflows.workflow]]
+name = "Clipboard Manager"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python clipboard_manager.py"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "clipboard_app"
+author = "agent"
+
+[workflows.workflow.metadata]
+agentRequireRestartOnSave = false
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python clipboard_manager.py"
+
+[deployment]
+run = ["sh", "-c", "python clipboard_manager.py"]
