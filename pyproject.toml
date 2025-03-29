@@ -3,4 +3,9 @@ name = "repl-nix-workspace"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "os-sys>=0.9.1",
+    "pillow>=11.1.0",
+    "psutil>=7.0.0",
+    "pyqt5>=5.15.11",
+]

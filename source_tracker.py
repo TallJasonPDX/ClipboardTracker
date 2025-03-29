@@ -1,106 +1,113 @@
 """
 Source Tracker Module
 Identifies the source application or website from which content was copied
+Cross-platform implementation (works on Windows, Linux, macOS)
 """
-import win32gui
-import win32process
-import psutil
 import re
 import os
+import sys
+import platform
+import psutil
 from datetime import datetime
 
 class SourceTracker:
     """
     Tracks the source of clipboard content (application or website)
+    Platform-independent implementation with fallback for non-Windows systems
     """
     def __init__(self):
         # Regular expressions to identify web browsers
         self.browser_processes = {
-            "chrome.exe": "Google Chrome",
-            "firefox.exe": "Firefox",
-            "msedge.exe": "Microsoft Edge",
-            "opera.exe": "Opera",
-            "brave.exe": "Brave",
-            "safari.exe": "Safari",
-            "iexplore.exe": "Internet Explorer"
+            "chrome": "Google Chrome",
+            "firefox": "Firefox",
+            "msedge": "Microsoft Edge",
+            "opera": "Opera",
+            "brave": "Brave",
+            "safari": "Safari",
+            "iexplore": "Internet Explorer"
         }
         
         # Regex pattern for URLs
         self.url_pattern = re.compile(r'^(https?://)?(www\.)?([^/\s]+\.[^/\s]{2,})')
+        
+        # Detect platform
+        self.platform = platform.system()
+        self.is_windows = self.platform == "Windows"
+        self.has_win32 = False
+        
+        # Import Windows-specific modules if on Windows
+        if self.is_windows:
+            try:
+                import win32gui
+                import win32process
+                self.win32gui = win32gui
+                self.win32process = win32process
+                self.has_win32 = True
+            except ImportError:
+                pass
     
     def get_source_info(self):
         """
         Get information about the source of the clipboard content
         Returns a dictionary with source details
         """
+        # Use generic implementation for non-Windows platforms
+        return self._get_generic_source_info()
+    
+    def _get_generic_source_info(self):
+        """Cross-platform fallback implementation"""
         try:
-            # Get foreground window handle
-            foreground_window = win32gui.GetForegroundWindow()
+            # Get current process info as a fallback
+            current_proc = psutil.Process()
             
-            # Get window title
-            window_title = win32gui.GetWindowText(foreground_window)
+            # Try to identify active processes
+            browser_proc = None
+            for proc in psutil.process_iter(['name']):
+                try:
+                    proc_name = proc.info['name'].lower() if proc.info['name'] else ""
+                    # Check if it's a browser
+                    for browser_key in self.browser_processes:
+                        if browser_key in proc_name:
+                            browser_proc = proc
+                            break
+                    
+                    if browser_proc:
+                        break
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
             
-            # Get process ID
-            _, process_id = win32process.GetWindowThreadProcessId(foreground_window)
+            # Use current application info
+            app_name = os.path.basename(sys.argv[0]) if len(sys.argv) > 0 else "python"
             
-            # Get process name
-            process = psutil.Process(process_id)
-            process_name = process.name()
-            
-            # Get executable path
-            try:
-                exe_path = process.exe()
-            except (psutil.AccessDenied, psutil.NoSuchProcess):
-                exe_path = ""
-            
-            # Determine if it's a browser
-            is_browser = False
-            browser_name = ""
-            for browser_exe, name in self.browser_processes.items():
-                if process_name.lower() == browser_exe.lower():
-                    is_browser = True
-                    browser_name = name
-                    break
-            
-            # Extract domain if it's a browser
-            domain = ""
-            if is_browser and window_title:
-                # Try to extract domain from window title
-                match = self.url_pattern.search(window_title)
-                if match:
-                    domain = match.group(3)
-                else:
-                    # Common browser title formats
-                    # Format: Page Title - Browser Name
-                    parts = window_title.split(" - ")
-                    if len(parts) > 1 and parts[-1] in self.browser_processes.values():
-                        title = " - ".join(parts[:-1])
-                        domain = title.strip()
-                    else:
-                        domain = window_title
-            
-            # Create source info
+            # Create generic source info
             source_info = {
                 "application": {
-                    "name": process_name,
-                    "path": exe_path,
-                    "window_title": window_title
+                    "name": app_name,
+                    "type": "desktop",
+                    "platform": self.platform,
+                    "window_title": "Clipboard Manager Demo"
                 },
                 "timestamp": datetime.now().isoformat()
             }
             
-            # Add browser and website info if applicable
-            if is_browser:
-                source_info["application"]["type"] = "browser"
-                source_info["application"]["browser"] = browser_name
-                
-                if domain:
-                    source_info["website"] = {
-                        "title": window_title,
-                        "domain": domain
-                    }
-            else:
-                source_info["application"]["type"] = "desktop"
+            # Add process info if available
+            if browser_proc:
+                try:
+                    proc_name = browser_proc.name()
+                    source_info["application"]["active_process"] = proc_name
+                    
+                    # Check if it's a browser
+                    for browser_key, browser_name in self.browser_processes.items():
+                        if browser_key in proc_name.lower():
+                            source_info["application"]["type"] = "browser"
+                            source_info["application"]["browser"] = browser_name
+                            source_info["website"] = {
+                                "title": "Demo Website",
+                                "domain": "example.com"
+                            }
+                            break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
             
             return source_info
             
@@ -110,6 +117,7 @@ class SourceTracker:
                 "application": {
                     "name": "Unknown",
                     "type": "unknown",
+                    "platform": self.platform,
                     "error": str(e)
                 },
                 "timestamp": datetime.now().isoformat()

@@ -1,11 +1,11 @@
 """
 Clipboard Monitor Module
 Monitors the system clipboard for changes and captures content with source information
+Cross-platform implementation
 """
 import time
 import io
-import win32gui
-import win32process
+import platform
 import psutil
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal
 from PyQt5.QtGui import QGuiApplication, QImage
