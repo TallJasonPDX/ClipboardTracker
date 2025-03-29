@@ -74,11 +74,6 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        # Pinned items tab
-        self.pinned_widget = HistoryWidget(self.clipboard_monitor, self.storage_manager)
-        self.pinned_widget.pinned_only = True  # Add this flag to identify pinned tab
-        self.tab_widget.addTab(self.pinned_widget, "Pinned")
-        
         # All items tab
         self.history_widget = HistoryWidget(self.clipboard_monitor, self.storage_manager)
         self.tab_widget.addTab(self.history_widget, "All Items")
@@ -90,6 +85,11 @@ class MainWindow(QMainWindow):
         # Images only tab
         self.image_widget = HistoryWidget(self.clipboard_monitor, self.storage_manager, filter_type="image")
         self.tab_widget.addTab(self.image_widget, "Images")
+        
+        # Pinned items tab (moved to last position)
+        self.pinned_widget = HistoryWidget(self.clipboard_monitor, self.storage_manager)
+        self.pinned_widget.pinned_only = True  # Add this flag to identify pinned tab
+        self.tab_widget.addTab(self.pinned_widget, "Pinned")
         
         # Add tab widget to main layout
         main_layout.addWidget(self.tab_widget)

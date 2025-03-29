@@ -6,7 +6,7 @@ import io
 import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                            QPushButton, QScrollArea, QFrame, QSizePolicy,
-                           QMenu, QAction, QToolButton)
+                           QMenu, QAction, QToolButton, QMainWindow)
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QPixmap, QImage, QFont, QIcon, QCursor
 
@@ -148,6 +148,7 @@ class ClipboardItemWidget(QFrame):
                     background: #d0d0ff;
                 }
             """)
+            self.item['pinned'] = True
         else:
             self.pin_button.setIcon(QIcon.fromTheme("pin-outline"))
             self.pin_button.setStyleSheet("""
@@ -160,13 +161,15 @@ class ClipboardItemWidget(QFrame):
                     background: #d0d0ff;
                 }
             """)
+            self.item['pinned'] = False
         
-        # Refresh the parent history widget if it's the pinned tab
+        # Find the MainWindow to refresh all tabs
         parent = self.parent()
-        while parent and not isinstance(parent, HistoryWidget):
+        while parent and not isinstance(parent, QMainWindow):
             parent = parent.parent()
-        if parent and parent.pinned_only:
-            parent.update_history()
+            
+        if parent:
+            parent.refresh_history()
     
     def format_source_info(self):
         """Format source information for display"""
